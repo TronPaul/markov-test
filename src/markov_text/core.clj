@@ -48,23 +48,20 @@
 
 (defn- get-or-create-token
   [token conn]
-  (nn/create conn {:text token}))
+  (nn/create-unique-in-index conn "tokens" "text" token {:text token}))
 
 (defn- get-or-create-ngram
   [ngram conn]
-  (nn/create conn {:hash (hash ngram)}))
+  (nn/create-unique-in-index conn "ngrams" "ngram" (hash ngram) {:hash (hash ngram)}))
 
 (defn- store-links
   [ngram conn]
   (let [ngram-node (get-or-create-ngram (:ngram ngram) conn)
         ngram-token-nodes (map #(get-or-create-token % conn) (:ngram ngram))]
-    (println "NGRAM: " ngram-node)
     (if (:prev ngram)
       (nrl/create conn (get-or-create-token (:prev ngram) conn) ngram-node :chain))
     (if (:next ngram)
-      (nrl/create conn ngram-node (let [next (get-or-create-token (:next ngram) conn)]
-                                    (println "NEXT: " next)
-                                    next) :chain))
+      (nrl/create conn ngram-node (get-or-create-token (:next ngram) conn) :chain))
     (map #(nrl/create conn % ngram-node :in) ngram-token-nodes)))
 
 (defn- store-chain

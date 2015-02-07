@@ -32,6 +32,19 @@
                  {:prev "over" :ngram (seq ["the" "lazy" "dog."]) :next nil}])
            (#'core/tokens->ngrams (seq ["The" "quick" "brown" "fox" "jumped" "over" "the" "lazy" "dog."]) 3)))))
 
+(deftest get-or-create-test
+  (testing "Get or create returns node on get"
+    (with-neo4j-server
+      (let [conn (create-connection)]
+        (core/ensure-tokens-index conn)
+        (core/ensure-ngrams-index conn)
+        (core/ensure-token-constraint conn)
+        (core/ensure-ngram-constraint conn)
+        (let [token "test"
+              ngram (seq ["this" "tests" "ngrams"])]
+          (is (= (#'core/get-or-create-token token conn) (#'core/get-or-create-token token conn)))
+          (is (= (#'core/get-or-create-ngram ngram conn) (#'core/get-or-create-ngram ngram conn))))))))
+
 (deftest add-line-test
   (testing "Add line to database"
     (with-neo4j-server
