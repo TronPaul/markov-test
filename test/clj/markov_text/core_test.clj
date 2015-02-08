@@ -3,7 +3,8 @@
             [markov-text.core :as core]
             [clojurewerkz.neocons.rest :as nr]
             [clojurewerkz.neocons.rest.cypher :as cy]
-            [clojurewerkz.neocons.rest.relationships :as nrl])
+            [clojurewerkz.neocons.rest.relationships :as nrl]
+            [clojurewerkz.neocons.rest.nodes :as nn])
   (:import (markov_text LocalTestServer)))
 
 (defn with-neo4j-server*
@@ -60,6 +61,20 @@
           (is (not (get-in (#'core/get-or-create-ngram ngram conn) [:data :end])))
           (is (get-in (#'core/get-or-create-ngram ngram conn {:start true}) [:data :start]))
           (is (get-in (#'core/get-or-create-ngram ngram conn {:end true}) [:data :end])))))))
+
+(deftest store-links-incs-weight
+  (testing "store-links increments weight on ngram"
+    (with-neo4j-server
+      (let [conn (create-connection)]
+        (core/ensure-tokens-index conn)
+        (core/ensure-ngrams-index conn)
+        (core/ensure-token-constraint conn)
+        (core/ensure-ngram-constraint conn)
+        (let [ngram {:prev nil :ngram (seq ["this" "tests" "ngrams"]) :next nil}]
+          (#'core/store-links ngram conn)
+          (is (= 1 (get-in (first (first (:data (cy/query conn "MATCH (n:Ngram {hash: {hash}}) RETURN n" {:hash (hash (:ngram ngram))})))) [:data :weight])))
+          (#'core/store-links ngram conn)
+          (is (= 2 (get-in (first (first (:data (cy/query conn "MATCH (n:Ngram {hash: {hash}}) RETURN n" {:hash (hash (:ngram ngram))})))) [:data :weight]))))))))
 
 (deftest build-line-test
   (testing "Build line"
