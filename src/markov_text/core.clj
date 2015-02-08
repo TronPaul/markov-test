@@ -99,9 +99,8 @@
 
 (defn- ngram+tokens->token-ngram-pairs
   [ngram-node token-nodes ngram+token->ngram-node]
-  (mapcat (fn [tn]
-            (let [ngram-node (ngram+token->ngram-node ngram-node tn)]
-              (repeat (get-in ngram-node [:data :weight]) [tn ngram-node]))) token-nodes))
+  (map (fn [tn]
+         [tn (ngram+token->ngram-node ngram-node tn)]) token-nodes))
 
 (defn- build-directional
   [ngram-node token-getter terminate-pred ngram+token->ngram-node token-joiner conn]
