@@ -56,9 +56,13 @@
   ([ngram conn]
     (get-or-create-ngram ngram conn {}))
   ([ngram conn {:keys [start end] :or {start false end false}}]
-    (let [ngram-node (nn/create-unique-in-index conn "ngrams" "ngram" (hash ngram) {:hash (hash ngram) :tokens ngram :start start :end end})]
+    (let [ngram-node (nn/create-unique-in-index conn "ngrams" "ngram" (hash ngram) {:hash (hash ngram) :tokens ngram :start start :end end :weight 1})]
+      (if (and start (not (get-in ngram-node [:data :start])))
+        (nn/set-property conn ngram-node :start true))
+      (if (and end (not (get-in ngram-node [:data :end])))
+        (nn/set-property conn ngram-node :end true))
       (nl/add conn ngram-node "Ngram")
-      ngram-node)))
+      (nn/get conn (:id ngram-node)))))
 
 (defn- store-links
   [ngram conn]

@@ -35,7 +35,7 @@
            (#'core/tokens->ngrams (seq ["The" "quick" "brown" "fox" "jumped" "over" "the" "lazy" "dog."]) 3)))))
 
 (deftest get-or-create-test
-  (testing "Get or create returns node on get"
+  (testing "Get or create returns the same node on get"
     (with-neo4j-server
       (let [conn (create-connection)]
         (core/ensure-tokens-index conn)
@@ -46,6 +46,20 @@
               ngram (seq ["this" "tests" "ngrams"])]
           (is (= (#'core/get-or-create-token token conn) (#'core/get-or-create-token token conn)))
           (is (= (#'core/get-or-create-ngram ngram conn) (#'core/get-or-create-ngram ngram conn))))))))
+
+(deftest get-or-create-ngram-updates-start-end-test
+  (testing "Get or create returns the same node on get"
+    (with-neo4j-server
+      (let [conn (create-connection)]
+        (core/ensure-tokens-index conn)
+        (core/ensure-ngrams-index conn)
+        (core/ensure-token-constraint conn)
+        (core/ensure-ngram-constraint conn)
+        (let [ngram (seq ["this" "tests" "ngrams"])]
+          (is (not (get-in (#'core/get-or-create-ngram ngram conn) [:data :start])))
+          (is (not (get-in (#'core/get-or-create-ngram ngram conn) [:data :end])))
+          (is (get-in (#'core/get-or-create-ngram ngram conn {:start true}) [:data :start]))
+          (is (get-in (#'core/get-or-create-ngram ngram conn {:end true}) [:data :end])))))))
 
 (deftest build-line-test
   (testing "Build line"
