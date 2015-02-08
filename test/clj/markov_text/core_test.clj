@@ -1,7 +1,9 @@
 (ns markov-text.core-test
   (:require [clojure.test :refer :all]
             [markov-text.core :as core]
-            [clojurewerkz.neocons.rest :as nr])
+            [clojurewerkz.neocons.rest :as nr]
+            [clojurewerkz.neocons.rest.cypher :as cy]
+            [clojurewerkz.neocons.rest.relationships :as nrl])
   (:import (markov_text LocalTestServer)))
 
 (defn with-neo4j-server*
@@ -45,12 +47,24 @@
           (is (= (#'core/get-or-create-token token conn) (#'core/get-or-create-token token conn)))
           (is (= (#'core/get-or-create-ngram ngram conn) (#'core/get-or-create-ngram ngram conn))))))))
 
-(deftest add-line-test
-  (testing "Add line to database"
+(deftest build-line-test
+  (testing "Build line"
     (with-neo4j-server
       (let [conn (create-connection)]
         (core/ensure-tokens-index conn)
         (core/ensure-ngrams-index conn)
         (core/ensure-token-constraint conn)
         (core/ensure-ngram-constraint conn)
-        (core/add-line "The quick brown fox jumped over the lazy dog." conn 3)))))
+        (core/add-line "The quick brown fox jumped over the lazy dog." conn 3)
+        (is (= "The quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
+
+(deftest build-line-4gram-test
+  (testing "Build line with 4grams"
+    (with-neo4j-server
+      (let [conn (create-connection)]
+        (core/ensure-tokens-index conn)
+        (core/ensure-ngrams-index conn)
+        (core/ensure-token-constraint conn)
+        (core/ensure-ngram-constraint conn)
+        (core/add-line "The quick brown fox jumped over the lazy dog." conn 4)
+        (is (= "The quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
