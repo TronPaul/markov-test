@@ -97,6 +97,11 @@
   [conn]
   (rand-nth (nl/get-all-nodes conn "Token")))
 
+(defn- ngram+tokens->token-ngram-pairs
+  [ngram-node token-nodes ngram+token->ngram]
+  (map (fn [tn]
+         [tn (ngram+token->ngram ngram-node tn)]) token-nodes))
+
 (defn- build-directional
   [ngram-node token-getter terminate-pred ngram+token->ngram token-joiner conn]
   (loop [ngram-node ngram-node
@@ -104,8 +109,7 @@
     (let [token-nodes (token-getter ngram-node conn)]
       (if (empty? token-nodes)
         token-acc
-        (let [token-node (rand-nth token-nodes)
-              next-ngram-node (ngram+token->ngram ngram-node token-node)]
+        (let [[token-node next-ngram-node] (rand-nth (ngram+tokens->token-ngram-pairs ngram-node token-nodes ngram+token->ngram))]
           (if (terminate-pred next-ngram-node)
             (token-joiner token-node token-acc)
             (recur next-ngram-node (token-joiner token-node token-acc))))))))
