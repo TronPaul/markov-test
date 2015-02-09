@@ -6,7 +6,8 @@
             [clojurewerkz.neocons.rest.labels :as nl]
             [clojurewerkz.neocons.rest.cypher :as cy]
             [clojurewerkz.neocons.rest.transaction :as tx]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [roul.random :as rr]))
 
 (defn ensure-tokens-index
   [conn]
@@ -68,12 +69,14 @@
   [ngram conn]
   (let [ngram-node (get-or-create-ngram (:ngram ngram) conn {:start (nil? (:prev ngram)) :end (nil? (:next ngram))})
         ngram-token-nodes (map #(get-or-create-token % conn) (:ngram ngram))]
-    (nn/set-property conn ngram-node :weight (inc (get-in ngram-node [:data :weight])))
+    (nn/set-property conn ngram-node :weight (inc (get-in ngram-node [:data :weight] 0)))
     (if (:prev ngram)
-      (nrl/create conn (get-or-create-token (:prev ngram) conn) ngram-node :chain))
+      (let [prev-rel (nrl/maybe-create conn (get-or-create-token (:prev ngram) conn) ngram-node :chain {:weight 0})]
+        (nrl/update conn prev-rel (merge (:data prev-rel) {:weight (inc (get-in prev-rel [:data :weight] 0))}))))
     (if (:next ngram)
-      (nrl/create conn ngram-node (get-or-create-token (:next ngram) conn) :chain))
-    (doall (map #(nrl/create conn % ngram-node :in) ngram-token-nodes))))
+      (let [next-rel (nrl/maybe-create conn ngram-node (get-or-create-token (:next ngram) conn) :chain {:weight 0})]
+        (nrl/update conn next-rel (merge (:data next-rel) {:weight (inc (get-in next-rel [:data :weight] 0))}))))
+    (doall (map #(nrl/maybe-create conn % ngram-node :in) ngram-token-nodes))))
 
 (defn- store-chain
   [ngrams conn]
