@@ -97,3 +97,15 @@
         (core/ensure-ngram-constraint conn)
         (core/add-line "The quick brown fox jumped over the lazy dog." conn 4)
         (is (= "The quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
+
+(deftest multi-line-test
+  (testing "Build line when different overlapping lines are added"
+    (with-neo4j-server
+      (let [conn (create-connection)]
+        (core/ensure-tokens-index conn)
+        (core/ensure-ngrams-index conn)
+        (core/ensure-token-constraint conn)
+        (core/ensure-ngram-constraint conn)
+        (core/add-line "The quick brown fox jumped over the lazy dog." conn 3)
+        (core/add-line "The Disney branded fox jumped over the lazy dog." conn 3)
+        (core/build-line conn)))))
