@@ -62,8 +62,8 @@
           (is (get-in (#'core/get-or-create-ngram ngram conn {:start true}) [:data :start]))
           (is (get-in (#'core/get-or-create-ngram ngram conn {:end true}) [:data :end])))))))
 
-(deftest store-links-incs-weight
-  (testing "store-links increments weight on ngram"
+(deftest store-links-incs-freq
+  (testing "store-links increments freq on ngram"
     (with-neo4j-server
       (let [conn (create-connection)]
         (core/ensure-tokens-index conn)
@@ -72,9 +72,9 @@
         (core/ensure-ngram-constraint conn)
         (let [ngram {:prev nil :ngram (seq ["this" "tests" "ngrams"]) :next nil}]
           (#'core/store-links ngram conn)
-          (is (= 1 (get-in (first (first (:data (cy/query conn "MATCH (n:Ngram {hash: {hash}}) RETURN n" {:hash (hash (:ngram ngram))})))) [:data :weight])))
+          (is (= 1 (get-in (first (first (:data (cy/query conn "MATCH (n:Ngram {hash: {hash}}) RETURN n" {:hash (hash (:ngram ngram))})))) [:data :freq])))
           (#'core/store-links ngram conn)
-          (is (= 2 (get-in (first (first (:data (cy/query conn "MATCH (n:Ngram {hash: {hash}}) RETURN n" {:hash (hash (:ngram ngram))})))) [:data :weight]))))))))
+          (is (= 2 (get-in (first (first (:data (cy/query conn "MATCH (n:Ngram {hash: {hash}}) RETURN n" {:hash (hash (:ngram ngram))})))) [:data :freq]))))))))
 
 (deftest build-line-test
   (testing "Build line"

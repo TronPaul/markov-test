@@ -57,7 +57,7 @@
   ([ngram conn]
     (get-or-create-ngram ngram conn {}))
   ([ngram conn {:keys [start end] :or {start false end false}}]
-    (let [ngram-node (nn/create-unique-in-index conn "ngrams" "ngram" (hash ngram) {:hash (hash ngram) :tokens ngram :start start :end end :weight 0})]
+    (let [ngram-node (nn/create-unique-in-index conn "ngrams" "ngram" (hash ngram) {:hash (hash ngram) :tokens ngram :start start :end end :freq 0})]
       (if (and start (not (get-in ngram-node [:data :start])))
         (nn/set-property conn ngram-node :start true))
       (if (and end (not (get-in ngram-node [:data :end])))
@@ -69,13 +69,13 @@
   [ngram conn]
   (let [ngram-node (get-or-create-ngram (:ngram ngram) conn {:start (nil? (:prev ngram)) :end (nil? (:next ngram))})
         ngram-token-nodes (map #(get-or-create-token % conn) (:ngram ngram))]
-    (nn/set-property conn ngram-node :weight (inc (get-in ngram-node [:data :weight] 0)))
+    (nn/set-property conn ngram-node :freq (inc (get-in ngram-node [:data :freq] 0)))
     (if (:prev ngram)
-      (let [prev-rel (nrl/maybe-create conn (get-or-create-token (:prev ngram) conn) ngram-node :chain {:weight 0})]
-        (nrl/update conn prev-rel (merge (:data prev-rel) {:weight (inc (get-in prev-rel [:data :weight] 0))}))))
+      (let [prev-rel (nrl/maybe-create conn (get-or-create-token (:prev ngram) conn) ngram-node :chain {:freq 0})]
+        (nrl/update conn prev-rel (merge (:data prev-rel) {:freq (inc (get-in prev-rel [:data :freq] 0))}))))
     (if (:next ngram)
-      (let [next-rel (nrl/maybe-create conn ngram-node (get-or-create-token (:next ngram) conn) :chain {:weight 0})]
-        (nrl/update conn next-rel (merge (:data next-rel) {:weight (inc (get-in next-rel [:data :weight] 0))}))))
+      (let [next-rel (nrl/maybe-create conn ngram-node (get-or-create-token (:next ngram) conn) :chain {:freq 0})]
+        (nrl/update conn next-rel (merge (:data next-rel) {:freq (inc (get-in next-rel [:data :freq] 0))}))))
     (doall (map #(nrl/maybe-create conn % ngram-node :in) ngram-token-nodes))))
 
 (defn- store-chain
@@ -90,20 +90,20 @@
 
 (defn- ngram->prevs
   [ngram-node conn]
-  (map #(first %) (:data (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN prev" {:id (get-in ngram-node [:metadata :id])}))))
+  (:data (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN r.freq, prev" {:id (get-in ngram-node [:metadata :id])})))
 
 (defn- ngram->nexts
   [ngram-node conn]
-  (map #(first %) (:data (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN next" {:id (get-in ngram-node [:metadata :id])}))))
+  (:data (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN r.freq, next" {:id (get-in ngram-node [:metadata :id])})))
 
 (defn- random-token
   [conn]
   (rand-nth (nl/get-all-nodes conn "Token")))
 
 (defn- ngram+tokens->token-ngram-pairs
-  [ngram-node token-nodes ngram+token->ngram-node]
-  (map (fn [tn]
-         {:token-node tn :ngram-node (ngram+token->ngram-node ngram-node tn)}) token-nodes))
+  [ngram-node token-freq-node-pairs ngram+token->ngram-node]
+  (map (fn [[tf tn]]
+         {:token-freq tf :token-node tn :ngram-node (ngram+token->ngram-node ngram-node tn)}) token-freq-node-pairs))
 
 (defn- select-next-token
   [token-ngram-node-maps]
@@ -113,10 +113,10 @@
   [ngram-node token-getter terminate-pred ngram+token->ngram-node token-joiner conn]
   (loop [ngram-node ngram-node
          token-acc nil]
-    (let [token-nodes (token-getter ngram-node conn)]
-      (if (empty? token-nodes)
+    (let [token-freq-node-pairs (token-getter ngram-node conn)]
+      (if (empty? token-freq-node-pairs)
         token-acc
-        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (ngram+tokens->token-ngram-pairs ngram-node token-nodes ngram+token->ngram-node))]
+        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (ngram+tokens->token-ngram-pairs ngram-node token-freq-node-pairs ngram+token->ngram-node))]
           (if (terminate-pred next-ngram-node)
             (token-joiner token-node token-acc)
             (recur next-ngram-node (token-joiner token-node token-acc))))))))
