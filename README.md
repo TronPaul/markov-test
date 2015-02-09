@@ -17,3 +17,4 @@ FIXME
   * move tf query into weighting func
   * split into 2 packages?
 * weighting options for building
+* build line relevant to another line
