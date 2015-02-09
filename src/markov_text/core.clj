@@ -100,7 +100,11 @@
 (defn- ngram+tokens->token-ngram-pairs
   [ngram-node token-nodes ngram+token->ngram-node]
   (map (fn [tn]
-         [tn (ngram+token->ngram-node ngram-node tn)]) token-nodes))
+         {:token-node tn :ngram-node (ngram+token->ngram-node ngram-node tn)}) token-nodes))
+
+(defn- select-next-token
+  [token-ngram-node-maps]
+  (rand-nth token-ngram-node-maps))
 
 (defn- build-directional
   [ngram-node token-getter terminate-pred ngram+token->ngram-node token-joiner conn]
@@ -109,7 +113,7 @@
     (let [token-nodes (token-getter ngram-node conn)]
       (if (empty? token-nodes)
         token-acc
-        (let [[token-node next-ngram-node] (rand-nth (ngram+tokens->token-ngram-pairs ngram-node token-nodes ngram+token->ngram-node))]
+        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (ngram+tokens->token-ngram-pairs ngram-node token-nodes ngram+token->ngram-node))]
           (if (terminate-pred next-ngram-node)
             (token-joiner token-node token-acc)
             (recur next-ngram-node (token-joiner token-node token-acc))))))))
