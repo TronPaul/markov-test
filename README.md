@@ -8,6 +8,9 @@ FIXME
 
 ## TODO
 
+* unit tests
+  * build w/ multiple lines added
+  * tf-idf calcs
 * refactor
   * neo4j queries
   * building function
