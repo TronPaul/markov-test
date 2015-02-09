@@ -100,23 +100,36 @@
   [conn]
   (rand-nth (nl/get-all-nodes conn "Token")))
 
-(defn- ngram+tokens->token-ngram-pairs
+(defn- ngram+tokens->ngram-data-maps
   [ngram-node token-freq-node-pairs ngram+token->ngram-node]
   (map (fn [[tf tn]]
          {:token-freq tf :token-node tn :ngram-node (ngram+token->ngram-node ngram-node tn)}) token-freq-node-pairs))
 
+(defn- wegighted-tf
+  [chain-freq max-chain-freq]
+  (+ 0.5 (/ (* 0.5 chain-freq) max-chain-freq)))
+
+(defn- idf
+  [total-ngram-count token-chain-count]
+  (Math/log (/ total-ngram-count (inc token-chain-count))))
+
+(defn- tf-idf
+  [chain-freq max-chain-freq total-ngram-count token-chain-count]
+  (* (wegighted-tf chain-freq max-chain-freq) (idf total-ngram-count token-chain-count)))
+
 (defn- select-next-token
   [token-ngram-node-maps]
-  (rand-nth token-ngram-node-maps))
+  (rr/rand-nth-weighted token-ngram-node-maps))
 
 (defn- build-directional
-  [ngram-node token-getter terminate-pred ngram+token->ngram-node token-joiner conn]
+  [ngram-node token-getter terminate-pred ngram+token->ngram-node weight-func token-joiner conn]
   (loop [ngram-node ngram-node
          token-acc nil]
     (let [token-freq-node-pairs (token-getter ngram-node conn)]
       (if (empty? token-freq-node-pairs)
         token-acc
-        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (ngram+tokens->token-ngram-pairs ngram-node token-freq-node-pairs ngram+token->ngram-node))]
+        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (map (fn [m]
+                                                                                         [m (weight-func m)]) (ngram+tokens->ngram-data-maps ngram-node token-freq-node-pairs ngram+token->ngram-node)))]
           (if (terminate-pred next-ngram-node)
             (token-joiner token-node token-acc)
             (recur next-ngram-node (token-joiner token-node token-acc))))))))
@@ -129,13 +142,50 @@
   [ngram-tokens conn]
   (first (first (:data (cy/query conn "MATCH (ngram:Ngram {hash: {hash}}) RETURN ngram" {:hash (hash ngram-tokens)})))))
 
+(defn- ngram-count
+  [conn]
+  (first (first (:data (cy/query conn "MATCH (n:Ngram) RETURN count(n)")))))
+
+(defn- get-weight
+  [{:keys [ngram-node token-node token-freq]} max-freq token-chain-count conn]
+  (tf-idf token-freq (max-freq ngram-node conn) (ngram-count conn) (token-chain-count token-node conn)))
+
+(defn- prev-max-freq
+  [ngram-node conn]
+  (first (first (:data (cy/query conn "MATCH (n:Ngram)<-[r:chain]-(t:Token) WHERE id(n) = {id} RETURN count(r)" {:id (get-in ngram-node [:metadata :id])})))))
+
+(defn- next-max-freq
+  [ngram-node conn]
+  (first (first (:data (cy/query conn "MATCH (n:Ngram)-[r:chain]->(t:Token) WHERE id(n) = {id} RETURN count(r)" {:id (get-in ngram-node [:metadata :id])})))))
+
+(defn prev-token-chain-count
+  [token-node conn]
+  (first (first (:data (cy/query conn "MATCH (t:Token)-[r:chain]->(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])})))))
+
+(defn next-token-chain-count
+  [token-node conn]
+  (first (first (:data (cy/query conn "MATCH (t:Token)<-[r:chain]-(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])})))))
+
 (defn- build-backwards
   [ngram-node conn]
-  (build-directional ngram-node ngram->prevs #(:start %) #(ngram-token-nodes->ngram-node (concat [(get-in %2 [:data :text])] (drop-last (get-in %1 [:data :tokens]))) conn) #(cons (get-in %1 [:data :text]) %2) conn))
+  (build-directional
+    ngram-node
+    ngram->prevs
+    #(:start %)
+    #(ngram-token-nodes->ngram-node (concat [(get-in %2 [:data :text])] (drop-last (get-in %1 [:data :tokens]))) conn)
+    #(get-weight % prev-max-freq prev-token-chain-count conn)
+    #(cons (get-in %1 [:data :text]) %2) conn))
 
 (defn- build-forwards
   [ngram-node conn]
-  (build-directional ngram-node ngram->nexts #(:end %) #(ngram-token-nodes->ngram-node (concat (rest (get-in %1 [:data :tokens])) [(get-in %2 [:data :text])]) conn) #(concat %2 [(get-in %1 [:data :text])]) conn))
+  (build-directional
+    ngram-node
+    ngram->nexts
+    #(:end %)
+    #(ngram-token-nodes->ngram-node (concat (rest (get-in %1 [:data :tokens])) [(get-in %2 [:data :text])]) conn)
+    #(get-weight % next-max-freq next-token-chain-count conn)
+    #(concat %2 [(get-in %1 [:data :text])])
+    conn))
 
 (defn build-line
   [conn]
