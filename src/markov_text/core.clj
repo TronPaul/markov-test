@@ -90,11 +90,11 @@
 
 (defn- ngram->prevs
   [ngram-node conn]
-  (first (:data (cy/query conn "MATCH (target:Ngram)<-[:chain*1..1]-(prev:Token) WHERE id(target) = {id} RETURN prev" {:id (get-in ngram-node [:metadata :id])}))))
+  (map #(first %) (:data (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN prev" {:id (get-in ngram-node [:metadata :id])}))))
 
 (defn- ngram->nexts
   [ngram-node conn]
-  (first (:data (cy/query conn "MATCH (target:Ngram)-[:chain*1..1]->(next:Token) WHERE id(target) = {id} RETURN next" {:id (get-in ngram-node [:metadata :id])}))))
+  (map #(first %) (:data (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN next" {:id (get-in ngram-node [:metadata :id])}))))
 
 (defn- random-token
   [conn]
@@ -123,7 +123,7 @@
 
 (defn- token-node->ngram-nodes
   [token-node conn]
-  (first (:data (cy/query conn "MATCH (token:Token)-[:in*1..1]->(ngram:Ngram) WHERE id(token) = {id} RETURN ngram" {:id (:id token-node)}))))
+  (map #(first %) (:data (cy/query conn "MATCH (token:Token)-[:in]->(ngram:Ngram) WHERE id(token) = {id} RETURN ngram" {:id (:id token-node)}))))
 
 (defn- ngram-token-nodes->ngram-node
   [ngram-tokens conn]
