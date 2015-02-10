@@ -89,17 +89,16 @@
         ngrams (tokens->ngrams line-tokens ngram-size)]
     (doall (store-chain ngrams conn))))
 
-(defn- ngram->prevs
-  [ngram-node conn]
-  (:data (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN r.freq, prev" {:id (get-in ngram-node [:metadata :id])})))
-
-(defn- ngram->nexts
-  [ngram-node conn]
-  (:data (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN r.freq, next" {:id (get-in ngram-node [:metadata :id])})))
-
 (defn- random-token
   [conn]
   (rand-nth (nl/get-all-nodes conn "Token")))
+
+(defn- ngram->next-tokens
+  [ngram-node direction conn]
+  (cond
+    (= :backward direction) (:data (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN r.freq, prev" {:id (get-in ngram-node [:metadata :id])}))
+    (= :forward direction) (:data (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN r.freq, next" {:id (get-in ngram-node [:metadata :id])}))
+    :else (throw (UnknownDirectionException. direction))))
 
 (defn- ngram-token-nodes->ngram-node
   [ngram-tokens conn]
@@ -109,7 +108,8 @@
   [ngram-node token-node direction]
   (cond
     (= :backward direction) (concat [(get-in token-node [:data :text])] (drop-last (get-in ngram-node [:data :tokens])))
-    (= :forward direction) (concat (rest (get-in ngram-node [:data :tokens])) [(get-in token-node [:data :text])])))
+    (= :forward direction) (concat (rest (get-in ngram-node [:data :tokens])) [(get-in token-node [:data :text])])
+    :else (throw (UnknownDirectionException. direction))))
 
 (defn- ngram+token->ngram-node
   [ngram-node token-node direction conn]
@@ -119,26 +119,6 @@
   [ngram-node token-freq-node-pairs direction conn]
   (map (fn [[tf tn]]
          {:token-freq tf :token-node tn :ngram-node (ngram+token->ngram-node ngram-node tn direction conn)}) token-freq-node-pairs))
-
-(defn- wegighted-tf
-  [chain-freq max-chain-freq]
-  (+ 0.5 (/ (* 0.5 chain-freq) max-chain-freq)))
-
-(defn- idf
-  [total-ngram-count token-chain-count]
-  (Math/log (/ total-ngram-count (inc token-chain-count))))
-
-(defn- tf-idf
-  [chain-freq max-chain-freq total-ngram-count token-chain-count]
-  (* (wegighted-tf chain-freq max-chain-freq) (idf total-ngram-count token-chain-count)))
-
-(defn- select-next-token
-  [token-ngram-node-maps]
-  (rr/rand-nth-weighted token-ngram-node-maps))
-
-(defn- token-node->ngram-nodes
-  [token-node conn]
-  (map #(first %) (:data (cy/query conn "MATCH (token:Token)-[:in]->(ngram:Ngram) WHERE id(token) = {id} RETURN ngram" {:id (:id token-node)}))))
 
 (defn- ngram-count
   [conn]
@@ -158,9 +138,37 @@
     (= :forward direction) (first (first (:data (cy/query conn "MATCH (t:Token)<-[r:chain]-(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])}))))
     :else (throw (UnknownDirectionException. direction))))
 
-(defn- weight
+(defn- wegighted-tf
+  [chain-freq max-chain-freq]
+  (+ 0.5 (/ (* 0.5 chain-freq) max-chain-freq)))
+
+(defn- idf
+  [total-ngram-count token-chain-count]
+  (Math/log (/ total-ngram-count (inc token-chain-count))))
+
+(defn- tf-idf
+  [chain-freq max-chain-freq total-ngram-count token-chain-count]
+  (* (wegighted-tf chain-freq max-chain-freq) (idf total-ngram-count token-chain-count)))
+
+(defn- weight-tf-idf
   [{:keys [ngram-node token-node token-freq]}  direction conn]
   (tf-idf token-freq (max-freq ngram-node direction conn) (ngram-count conn) (token-chain-count token-node direction conn)))
+
+(defn- select-next-token-tf-idf
+  [ngram-node token-freq-node-pairs direction conn]
+  (rr/rand-nth-weighted (map (fn [m]
+                               [m (weight-tf-idf m direction conn)]) (ngram+tokens->ngram-data-maps ngram-node token-freq-node-pairs direction conn))))
+
+(defn- token-node->ngram-nodes
+  [token-node conn]
+  (map #(first %) (:data (cy/query conn "MATCH (token:Token)-[:in]->(ngram:Ngram) WHERE id(token) = {id} RETURN ngram" {:id (:id token-node)}))))
+
+(defn- terminate-pred
+  [ngram-node direction]
+  (cond
+    (= :backward direction) (:start ngram-node)
+    (= :forward direction) (:end ngram-node)
+    :else (throw (UnknownDirectionException. direction))))
 
 (defn- token-joiner
   [token acc direction]
@@ -170,38 +178,19 @@
     :else (throw (UnknownDirectionException. direction))))
 
 (defn- build-directional
-  [ngram-node direction token-getter terminate-pred conn]
+  [ngram-node direction conn]
   (loop [ngram-node ngram-node
          token-acc nil]
-    (let [token-freq-node-pairs (token-getter ngram-node conn)]
+    (let [token-freq-node-pairs (ngram->next-tokens ngram-node direction conn)]
       (if (empty? token-freq-node-pairs)
         token-acc
-        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (map (fn [m]
-                                                                                         [m (weight m direction conn)]) (ngram+tokens->ngram-data-maps ngram-node token-freq-node-pairs direction conn)))]
-          (if (terminate-pred next-ngram-node)
+        (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token-tf-idf ngram-node token-freq-node-pairs direction conn)]
+          (if (terminate-pred next-ngram-node direction)
             (token-joiner token-node token-acc direction)
             (recur next-ngram-node (token-joiner token-node token-acc direction))))))))
-
-(defn- build-backwards
-  [ngram-node conn]
-  (build-directional
-    ngram-node
-    :backward
-    ngram->prevs
-    #(:start %)
-    conn))
-
-(defn- build-forwards
-  [ngram-node conn]
-  (build-directional
-    ngram-node
-    :forward
-    ngram->nexts
-    #(:end %)
-    conn))
 
 (defn build-line
   [conn]
   (let [init-token-node (random-token conn)
         init-ngram-node (rand-nth (token-node->ngram-nodes init-token-node conn))]
-    (string/join " " (concat (build-backwards init-ngram-node conn) (get-in init-ngram-node [:data :tokens]) (build-forwards init-ngram-node conn)))))
+    (string/join " " (concat (build-directional init-ngram-node :backward conn) (get-in init-ngram-node [:data :tokens]) (build-directional init-ngram-node :forward conn)))))
