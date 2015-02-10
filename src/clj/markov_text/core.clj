@@ -95,10 +95,10 @@
 
 (defn- ngram->next-tokens
   [ngram-node direction conn]
-  (cond
-    (= :backward direction) (:data (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN r.freq, prev" {:id (get-in ngram-node [:metadata :id])}))
-    (= :forward direction) (:data (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN r.freq, next" {:id (get-in ngram-node [:metadata :id])}))
-    :else (throw (UnknownDirectionException. direction))))
+  (:data (cond
+           (= :backward direction) (cy/query conn "MATCH (target:Ngram)<-[r:chain]-(prev:Token) WHERE id(target) = {id} RETURN r.freq, prev" {:id (get-in ngram-node [:metadata :id])})
+           (= :forward direction) (cy/query conn "MATCH (target:Ngram)-[r:chain]->(next:Token) WHERE id(target) = {id} RETURN r.freq, next" {:id (get-in ngram-node [:metadata :id])})
+           :else (throw (UnknownDirectionException. direction)))))
 
 (defn- ngram-token-nodes->ngram-node
   [ngram-tokens conn]
@@ -126,17 +126,17 @@
 
 (defn- max-freq
   [ngram-node direction conn]
-  (cond
-    (= :backward direction) (first (first (:data (cy/query conn "MATCH (n:Ngram)<-[r:chain]-(t:Token) WHERE id(n) = {id} RETURN count(r)" {:id (get-in ngram-node [:metadata :id])}))))
-    (= :forward direction) (first (first (:data (cy/query conn "MATCH (n:Ngram)-[r:chain]->(t:Token) WHERE id(n) = {id} RETURN count(r)" {:id (get-in ngram-node [:metadata :id])}))))
-    :else (throw (UnknownDirectionException. direction))))
+  (first (first (:data (cond
+                         (= :backward direction) (cy/query conn "MATCH (n:Ngram)<-[r:chain]-(t:Token) WHERE id(n) = {id} RETURN count(r)" {:id (get-in ngram-node [:metadata :id])})
+                         (= :forward direction) (cy/query conn "MATCH (n:Ngram)-[r:chain]->(t:Token) WHERE id(n) = {id} RETURN count(r)" {:id (get-in ngram-node [:metadata :id])})
+                         :else (throw (UnknownDirectionException. direction)))))))
 
 (defn- token-chain-count
   [token-node direction conn]
-  (cond
-    (= :backward direction) (first (first (:data (cy/query conn "MATCH (t:Token)-[r:chain]->(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])}))))
-    (= :forward direction) (first (first (:data (cy/query conn "MATCH (t:Token)<-[r:chain]-(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])}))))
-    :else (throw (UnknownDirectionException. direction))))
+  (first (first (:data (cond
+                         (= :backward direction) (cy/query conn "MATCH (t:Token)-[r:chain]->(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])})
+                         (= :forward direction) (cy/query conn "MATCH (t:Token)<-[r:chain]-(n:Ngram) WHERE id(t) = {id} RETURN count(r)" {:id (get-in token-node [:metadata :id])})
+                         :else (throw (UnknownDirectionException. direction)))))))
 
 (defn- wegighted-tf
   [chain-freq max-chain-freq]
