@@ -152,8 +152,15 @@
   [{:keys [ngram-node token-node token-freq]}  direction conn]
   (tf-idf token-freq (max-freq ngram-node direction conn) (ngram-count conn) (token-chain-count token-node direction conn)))
 
+(defn- token-joiner
+  [token acc direction]
+  (cond
+    (= :backward direction) (cons (get-in token [:data :text]) acc)
+    (= :forward direction) (concat acc [(get-in token [:data :text])])
+    :else (throw (UnknownDirectionException. direction))))
+
 (defn- build-directional
-  [ngram-node direction token-getter terminate-pred ngram+token->ngram-node token-joiner conn]
+  [ngram-node direction token-getter terminate-pred ngram+token->ngram-node conn]
   (loop [ngram-node ngram-node
          token-acc nil]
     (let [token-freq-node-pairs (token-getter ngram-node conn)]
@@ -162,8 +169,8 @@
         (let [{next-ngram-node :ngram-node :keys [token-node]} (select-next-token (map (fn [m]
                                                                                          [m (weight m direction conn)]) (ngram+tokens->ngram-data-maps ngram-node token-freq-node-pairs ngram+token->ngram-node)))]
           (if (terminate-pred next-ngram-node)
-            (token-joiner token-node token-acc)
-            (recur next-ngram-node (token-joiner token-node token-acc))))))))
+            (token-joiner token-node token-acc direction)
+            (recur next-ngram-node (token-joiner token-node token-acc direction))))))))
 
 (defn- build-backwards
   [ngram-node conn]
@@ -173,7 +180,7 @@
     ngram->prevs
     #(:start %)
     #(ngram-token-nodes->ngram-node (concat [(get-in %2 [:data :text])] (drop-last (get-in %1 [:data :tokens]))) conn)
-    #(cons (get-in %1 [:data :text]) %2) conn))
+    conn))
 
 (defn- build-forwards
   [ngram-node conn]
@@ -183,7 +190,6 @@
     ngram->nexts
     #(:end %)
     #(ngram-token-nodes->ngram-node (concat (rest (get-in %1 [:data :tokens])) [(get-in %2 [:data :text])]) conn)
-    #(concat %2 [(get-in %1 [:data :text])])
     conn))
 
 (defn build-line
