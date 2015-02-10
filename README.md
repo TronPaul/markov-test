@@ -13,7 +13,6 @@ FIXME
   * tf-idf calcs
 * refactor
   * neo4j queries
-  * building function
   * move tf query into weighting func
   * split into 2 packages?
 * weighting options for building
