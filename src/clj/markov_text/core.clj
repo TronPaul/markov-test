@@ -26,6 +26,10 @@
   [conn]
   (nn/create-index conn "nodes" {:unique true :property-keys "hash"}))
 
+(defn connect
+  [& args]
+  (apply nr/connect args))
+
 (defn- tokenize
   [line]
   (string/split line #" "))

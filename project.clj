@@ -1,4 +1,4 @@
-(defproject markov-text "0.0.2"
+(defproject markov-text "0.0.3"
   :description "markov text generation library using neo4j"
   :url "http://github.com/TronPaul/markov-text"
   :dependencies [[org.clojure/clojure "1.6.0"]

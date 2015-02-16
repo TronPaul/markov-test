@@ -1,10 +1,7 @@
 (ns markov-text.core-test
   (:require [clojure.test :refer :all]
             [markov-text.core :as core]
-            [clojurewerkz.neocons.rest :as nr]
-            [clojurewerkz.neocons.rest.cypher :as cy]
-            [clojurewerkz.neocons.rest.relationships :as nrl]
-            [clojurewerkz.neocons.rest.nodes :as nn])
+            [clojurewerkz.neocons.rest.cypher :as cy])
   (:import (markov_text LocalTestServer)))
 
 (defn with-neo4j-server*
@@ -22,7 +19,7 @@
 
 (defn- create-connection
   []
-  (nr/connect "http://localhost:7474/db/data/"))
+  (core/connect "http://localhost:7474/db/data/"))
 
 (deftest tokens->ngrams-test
   (testing "Create ngrams from tokens list"
