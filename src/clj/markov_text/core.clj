@@ -83,9 +83,12 @@
   [ngrams conn]
   (map #(store-links % conn) ngrams))
 
+(defn format-tokens [tokens]
+  (map string/lower-case tokens))
+
 (defn add-line
   [line conn ngram-size]
-  (let [line-tokens (tokenize line)
+  (let [line-tokens (format-tokens (tokenize line))
         ngrams (tokens->ngrams line-tokens ngram-size)]
     (doall (store-chain ngrams conn))))
 

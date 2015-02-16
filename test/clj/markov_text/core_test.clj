@@ -35,7 +35,7 @@
                  {:prev "over" :ngram (seq ["the" "lazy" "dog."]) :next nil}])
            (#'core/tokens->ngrams (seq ["The" "quick" "brown" "fox" "jumped" "over" "the" "lazy" "dog."]) 3)))))
 
-(deftest get-or-create-test
+(deftest get-or-create-node-test
   (testing "Get or create returns the same node on get"
     (with-neo4j-server
       (let [conn (create-connection)]
@@ -85,7 +85,7 @@
         (core/ensure-token-constraint conn)
         (core/ensure-ngram-constraint conn)
         (core/add-line "The quick brown fox jumped over the lazy dog." conn 3)
-        (is (= "The quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
+        (is (= "the quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
 
 (deftest build-line-4gram-test
   (testing "Build line with 4grams"
@@ -96,7 +96,7 @@
         (core/ensure-token-constraint conn)
         (core/ensure-ngram-constraint conn)
         (core/add-line "The quick brown fox jumped over the lazy dog." conn 4)
-        (is (= "The quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
+        (is (= "the quick brown fox jumped over the lazy dog." (core/build-line conn)))))))
 
 (deftest multi-line-test
   (testing "Build line when different overlapping lines are added"
